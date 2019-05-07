@@ -27,6 +27,7 @@ from ddpg import DDPG
 from setting import SETTING
 # import tf  as tf_trans #for euler <-> quaternion transformation
 
+# CUDA_VISIBLE_DEVICES=1
 
 import copy
 #from robot_control_interface.env.gazebo_env.handout_gazebo import handout_gazebo
@@ -70,6 +71,40 @@ def quaternion_to_euler(x, y, z, w):
     return [roll, pitch, yaw]
 
 
+def multistage_test(env, test_round, ddpg1, ddpg2):
+    goal_count = 0
+    step_count = 0
+    reward_sum = 0
+    act_bound = SETTING.ACT_BOUND
+    for i in range(test_round):
+        s, r, done = env.reset()
+        for j in range(SETTING.MAX_EP_STEPS):
+            if env.is_sucked == False:
+                a = ddpg1.choose_action(s)
+            else:
+                a = ddpg2.choose_action(s)
+
+                # print("output1:", ddpg1.choose_action(s))
+                # print("output2:", ddpg2.choose_action(s))
+                # input("stop")
+
+            a = np.clip(a, -act_bound, act_bound)
+            s_, r, done, is_goal = env.step(a)
+            s = s_
+            if is_goal:
+                goal_count += 1
+            if j == SETTING.MAX_EP_STEPS - 1 or done == True:
+                reward_sum += r
+                step_count += j
+                break
+    goal_rate = round(goal_count/test_round*100, 2)
+    print("===============================================================================")
+    print("goal_rate:{}% average_reward:{}, step_count:{}"
+              .format(goal_rate, reward_sum/test_round, step_count))
+    return
+
+
+
 def main():
     # np.set_printoptions(precision=4, linewidth=125, suppress=True)
     # np.core.arrayprint._line_width = 125
@@ -111,15 +146,20 @@ def main():
     state_dim = SETTING.STATE_SIZE
     act_dim = SETTING.ACT_SIZE
     act_bound = SETTING.ACT_BOUND
-
-    ddpg = DDPG(act_dim, state_dim, act_bound)
     start_time = time.time()
 
-    ddpg.initial_replay_memory(env)
-    ddpg.train(env)
+    # ddpg = DDPG(act_dim, state_dim, act_bound)
+    # ddpg.initial_replay_memory(env)
+    # ddpg.train(env)
 
-    # ddpg.restore_model()
-    # ddpg.test(env, 100)
+    ddpg1 = DDPG(act_dim, state_dim, act_bound)
+    ddpg1.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_first_step/0424_firstStep100.0.ckpt")
+    ddpg1.test(env, 1000)
+    # ddpg2 = DDPG(act_dim, state_dim, act_bound)
+    # ddpg2.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_second_step/0424_secondStep100.0.ckpt")
+    # multistage_test(env, 1000, ddpg1, ddpg2)
+    # ddpg.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_alltep94.0.ckpt")
+    # ddpg.test(env,1000)
     # input("stop")
 
 

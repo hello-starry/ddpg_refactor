@@ -4,12 +4,14 @@
 class SETTING(object):
 
     MULTITASK = False
+    SAVE_MODEL = True
+    SAVE_STATE = False
 
-    MAX_EPISODES = 100000000
+    MAX_EPISODES = 10000000
     MAX_EP_STEPS = 800
     NEURONNUM = 1000
-    LR_A = 4e-5  # learning rate for actor
-    LR_C = 8e-5  # learning rate for critic
+    LR_A = 1e-5  # learning rate for actor
+    LR_C = 1e-5  # learning rate for critic
     GAMMA = 0.9  # reward discount
     TAU = 0.001  # soft replacement
     MEMORY_CAPACITY = 20000
@@ -28,7 +30,6 @@ class SETTING(object):
 
     ACT_SIZE = 6
     ACT_BOUND = 0.05
-
 
 
     # self.infodict["obs_array"] = True

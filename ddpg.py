@@ -2,63 +2,71 @@
 import numpy as np
 import tensorflow as tf
 from setting import SETTING
-
-
-
+import time
+from env.gazebo_env.suction_grasp_env import *
+from rrt import RRT
 
 class DDPG(object):
-    def __init__(self, a_dim, s_dim, a_bound,):
+    def __init__(self, a_dim, s_dim, a_bound):
+        tf.reset_default_graph()    #In order to use multistage model
+
         self.memory = np.zeros((SETTING.MEMORY_CAPACITY, s_dim * 2 + a_dim + 1 + 1), dtype=np.float32)
         self.index_pointer = 0
-        if SETTING.MULTITASK:
-            self.log_file = open("0419_log_secondStep.txt","w+")
-        else:
-            self.log_file = open("0419_log_firstStep.txt","w+")
+        # if SETTING.MULTITASK:
+        #     self.log_file = open("0424_log_secondStep.txt","w+")
+        # else:
+        #     self.log_file = open("0424_log_allStep.txt","w+")
 
-        session_config = tf.ConfigProto()
+        # session_config = tf.ConfigProto()
+        session_config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
         session_config.gpu_options.allow_growth=True
         self.sess = tf.Session(config=session_config)
-        self.saved_model_path = "/home/ccchang/ddpg_refactor/saved_model/0419_firstStep.ckpt"
-
-        self.a_dim, self.s_dim, self.a_bound = a_dim, s_dim, a_bound,
-        self.S = tf.placeholder(tf.float32, [None, s_dim], 's')
-        self.S_ = tf.placeholder(tf.float32, [None, s_dim], 's_')
-        self.R = tf.placeholder(tf.float32, [None, 1], 'r')
-        self.done = tf.placeholder(tf.float32, [None, 1],'done')
-
-        self.a = self._build_a(self.S,)
-        self.q = self._build_c(self.S, self.a)
-        a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Actor')
-        c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Critic')
-        ema = tf.train.ExponentialMovingAverage(decay=1 - SETTING.TAU)          # soft replacement
+        self.saved_model_path = "/home/ccchang/ddpg_refactor/saved_model/"
+        self.max_goal_rate = 0
 
         def ema_getter(getter, name, *args, **kwargs):
             return ema.average(getter(name, *args, **kwargs))
 
-        target_update = [ema.apply(a_params), ema.apply(c_params)]      # soft update operation
-        a_ = self._build_a(self.S_, reuse=True, custom_getter=ema_getter)   # replaced target parameters
-        q_ = self._build_c(self.S_, a_, reuse=True, custom_getter=ema_getter)
+        with tf.device('/GPU:0'):
+            self.a_dim, self.s_dim, self.a_bound = a_dim, s_dim, a_bound,
+            self.S = tf.placeholder(tf.float32, [None, s_dim], 's')
+            self.S_ = tf.placeholder(tf.float32, [None, s_dim], 's_')
+            self.R = tf.placeholder(tf.float32, [None, 1], 'r')
+            self.done = tf.placeholder(tf.float32, [None, 1],'done')
 
-        self.a_loss = - tf.reduce_mean(self.q)  # maximize the q
-        self.actor_train = tf.train.AdamOptimizer(SETTING.LR_A).minimize(self.a_loss, var_list=a_params)
+            self.a = self._build_a(self.S,)
+            self.q = self._build_c(self.S, self.a)
+            a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Actor')
+            c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Critic')
+            ema = tf.train.ExponentialMovingAverage(decay=1 - SETTING.TAU)          # soft replacement
+            target_update = [ema.apply(a_params), ema.apply(c_params)]      # soft update operation
+            a_ = self._build_a(self.S_, reuse=True, custom_getter=ema_getter)   # replaced target parameters
+            q_ = self._build_c(self.S_, a_, reuse=True, custom_getter=ema_getter)
 
-        with tf.control_dependencies(target_update):    # soft targetnet update
-            # q_target = self.R + SETTING.GAMMA * q_
-            q_target = self.R + (1.-self.done) * SETTING.GAMMA * q_
+            self.a_loss = - tf.reduce_mean(self.q)  # maximize the q
+            self.actor_train = tf.train.AdamOptimizer(SETTING.LR_A).minimize(self.a_loss, var_list=a_params)
 
-            self.td_loss = tf.losses.mean_squared_error(labels=q_target, predictions=self.q)
-            self.critic_train = tf.train.AdamOptimizer(SETTING.LR_C).minimize(self.td_loss, var_list=c_params)
+            with tf.control_dependencies(target_update):    # soft targetnet update
+                # q_target = self.R + SETTING.GAMMA * q_
+                q_target = self.R + (1.-self.done) * SETTING.GAMMA * q_
 
-        self.sess.run(tf.global_variables_initializer())
-        self.saver = tf.train.Saver()
+                self.td_loss = tf.losses.mean_squared_error(labels=q_target, predictions=self.q)
+                self.critic_train = tf.train.AdamOptimizer(SETTING.LR_C).minimize(self.td_loss, var_list=c_params)
 
-    def save_model(self):
-        save_path = self.saver.save(self.sess, self.saved_model_path)
+            self.sess.run(tf.global_variables_initializer())
+            self.saver = tf.train.Saver()
+
+    def save_model(self, sName):
+        save_path = self.saver.save(self.sess, self.saved_model_path + sName)
         print("Model saved in path: %s" % save_path)
 
-    def restore_model(self):
-        self.saver.restore(self.sess, self.saved_model_path)
+    def restore_model(self, path=None):
+        if path != None:
+            self.saver.restore(self.sess, path)
+        else:
+            self.saver.restore(self.sess, self.saved_model_path)
         print("Model restored.")
+        return
 
     def initial_replay_memory(self, env):
         size_counter = 0
@@ -86,12 +94,11 @@ class DDPG(object):
         return
 
     def train(self,env):
+        self.log_file = open("tmp", "w+")
         for i in range(SETTING.MAX_EPISODES):
-
             if i%100 == 0:
-                self.test(env,10)
-                self.save_model()
-
+                self.test(env,100)
+                # self.save_model()
 
             if SETTING.MULTITASK:
                 s, r, done = env.reset_from_record()
@@ -118,12 +125,20 @@ class DDPG(object):
                           'A loss: %.6f' % (a_loss_sum / (j+1)), 'TD error: %.6f' % (c_loss_sum / (j+1)))
                     break
 
-    def test(self, env, round):
+    def test(self, env, test_round):
         goal_count = 0
         step_count = 0
         reward_sum = 0
         act_bound = SETTING.ACT_BOUND
-        for i in range(round):
+
+        # start_pos = [4.21, -0.92, -0.26, 0.8, -1.34, 0.1]
+        # end_pos = [4.71, -1.12, -0.46, 0., -1.54, 0.]
+        end_pos = [1.57, 0.96, 0.828, 0., 1.36, 0.]
+        max_iteration = 600
+        g_rate = 0.05
+        e_factor = 0.1
+
+        for i in range(test_round):
             if SETTING.MULTITASK:
                 s, r, done = env.reset_from_record()
             else:
@@ -133,6 +148,9 @@ class DDPG(object):
                 a = self.choose_action(s)
                 a = np.clip(a, -act_bound, act_bound)
                 s_, r, done, is_goal = env.step(a)
+                time.sleep(0.02)
+
+                dist = env.get_tcp_target_distance()
                 s = s_
                 if is_goal:
                     goal_count += 1
@@ -141,12 +159,42 @@ class DDPG(object):
                     step_count += j
                     break
 
+                #Apply RRT
+                if dist < 0.1:
+                    start_pos = joint_dict_to_list(env.interface.GAZEBO_GetPosition("vs060"))
+                    # env.interface.GAZEBO_SetModel("vs060", start_pos_dict, {}, {})
+                    rrt = RRT(env=env, start=start_pos, goal=end_pos, goal_sample_rate=g_rate, expand_factor=e_factor,
+                              max_iteration=max_iteration)
+                    ptr = None
+                    while ptr == None:
+                        ptr = rrt.plan(animation=False)
+
+                    while ptr != None:
+                        env.interface.GAZEBO_SetModel("vs060", make_6joint_dict(ptr.joint_pos), {}, {})
+                        time.sleep(0.02)
+                        env.interface.GAZEBO_Step(1)
+                        ptr = ptr.next
+                    goal_count += 1
+                    break
+
+        goal_rate = round(goal_count/test_round*100, 2)
+
+        if SETTING.SAVE_MODEL:
+            if self.max_goal_rate < goal_rate:
+                self.max_goal_rate = goal_rate
+                self.save_model("0425_secondStep" + str(goal_rate) + ".ckpt")
+
+                # if SETTING.MULTITASK==True:
+                #     self.save_model("0424_secondStep" + str(goal_rate) + ".ckpt")
+                # else:
+                #     self.save_model("0424_firstStep" + str(goal_rate) + ".ckpt")
+
+            print("{}\t{}\t{}".format(goal_rate, reward_sum / test_round, step_count), file=self.log_file)
+            self.log_file.flush()
+
         print("===============================================================================")
         print("goal_rate:{}% average_reward:{}, step_count:{}"
-              .format(goal_count/round*100, reward_sum/round, step_count))
-
-        print("{}\t{}\t{}".format(goal_count / round * 100, reward_sum / round, step_count), file=self.log_file)
-        self.log_file.flush()
+                  .format(goal_rate, reward_sum/test_round, step_count))
 
         return
 
@@ -196,7 +244,6 @@ class DDPG(object):
         trainable = True if reuse is None   else False
         with tf.variable_scope('Actor', reuse=reuse, custom_getter=custom_getter):
             net = tf.layers.dense(s, SETTING.NEURONNUM, activation=tf.nn.relu, name='l1', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
-
             net = tf.layers.dense(net, SETTING.NEURONNUM, activation=tf.nn.relu, name='l2', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
             net = tf.layers.dense(net, SETTING.NEURONNUM, activation=tf.nn.relu, name='l3', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
             net = tf.layers.dense(net, SETTING.NEURONNUM, activation=tf.nn.relu, name='l4', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
