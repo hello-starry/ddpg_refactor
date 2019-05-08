@@ -143,115 +143,33 @@ def main():
     # s_dim = env.retinfo()["obs_array_size"]
     # a_dim = env.retinfo()["act_array_size"]
     # a_bound = env.retinfo()["act_array_range"][1]
-    state_dim = SETTING.STATE_SIZE
-    act_dim = SETTING.ACT_SIZE
+    state_dim = SETTING.STATE_DIMENTION
+    act_dim = SETTING.ACT_DIMENTION
     act_bound = SETTING.ACT_BOUND
     start_time = time.time()
 
-    # ddpg = DDPG(act_dim, state_dim, act_bound)
+    ddpg = DDPG(act_dim, state_dim, act_bound)
     # ddpg.initial_replay_memory(env)
     # ddpg.train(env)
 
-    ddpg1 = DDPG(act_dim, state_dim, act_bound)
-    ddpg1.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_first_step/0424_firstStep100.0.ckpt")
-    ddpg1.test(env, 1000)
-    # ddpg2 = DDPG(act_dim, state_dim, act_bound)
-    # ddpg2.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_second_step/0424_secondStep100.0.ckpt")
-    # multistage_test(env, 1000, ddpg1, ddpg2)
-    # ddpg.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_alltep94.0.ckpt")
-    # ddpg.test(env,1000)
+    ddpg.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_first_step/0424_firstStep100.0.ckpt")
+    ddpg.test(env, 10000)
+
+    # ddpg.restore_model("/home/ccchang/ddpg_refactor/saved_model/0508_ddpgRRT_secondStep100.0.ckpt")
+    # ddpg.test(env,10000)
+
+
+
     # input("stop")
 
 
-    # for i in range(SETTING.MAX_EPISODES):
-    #     s, r, done, r_back = env.reset()
-    #     # s, r, done, r_back = env.reset_from_record()
-    #     reward_sum = 0
-    #     if size_counter > 400:
-    #         looptype = looptype + 1
-    #         size_counter = 0
-    #
-    #     if looptype == 0:
-    #         looptype = looptype + 1
-    #
-    #     if looptype == 4:
-    #         if ddpg.index_pointer > SETTING.MEMORY_CAPACITY:
-    #             looptype = 0
-    #         else:
-    #             looptype = 1
-    #
-    #     if looptype == 0 or looptype == 2:
-    #         if looptype == 0:
-    #             if random.random() < 0.5:
-    #                 s_raw, r, done, r_back = env.reset()
-    #                 # s_raw, r, done, r_back = env.reset_from_record()
-    #
-    #             else:
-    #                 pass
-    #         else:
-    #             s_raw, r, done, r_back = env.reset()
-    #             # s_raw, r, done, r_back = env.reset_from_record()
-    #
-    #     a_loss_sum = 0.0
-    #     c_loss_sum = 0.0
-    #     gerrorcount = 0
-    #
-    #
-    #     # if i!=0 and i%1000 ==0:
-    #     #     SETTING.LR_A /= 2.
-    #     #     SETTING.LR_C /= 2.
-    #     #     print("lr:{}".format(SETTING.LR_C))
-    #
-    #     q_list = []
-    #     for j in range(SETTING.MAX_EP_STEPS):
-    #         # Add exploration noise
-    #         a = ddpg.choose_action(s)
-    #         q = ddpg.get_Q_value(s)
-    #         q_list.append(q)
-    #
-    #         if looptype != 0:
-    #             a = np.clip(np.random.normal(a, explore_bound), -act_bound, act_bound)
-    #         # s__back = env.get_back_s()["obs_array_data"][0]
-    #         # s__raw, r, done = env.step(a)
-    #         # s_ = s__raw["obs_array_data"][0]
-    #
-    #         s_, r, done = env.step(a)
-    #         if looptype != 0:
-    #             ddpg.store_transition(s, a, r / 1.0, done, s_,)
-    #             size_counter = size_counter + 1
-    #
-    #             if ddpg.index_pointer > SETTING.MEMORY_CAPACITY:
-    #                 # explore_bound *= .999    # decay the action randomness
-    #                 a_loss, c_loss = ddpg.learn()
-    #                 a_loss_sum = a_loss_sum + a_loss
-    #                 c_loss_sum = c_loss_sum + c_loss
-    #                 gerrorcount = gerrorcount + 1
-    #         s = s_
-    #         reward_sum += r
-    #
-    #         if j == SETTING.MAX_EP_STEPS - 1 or done == True:
-    #             print('Episode:', i, 'Step:', j, ' Avg eward: %i' % int(reward_sum), 'Explore: %.5f' % explore_bound,
-    #                   'A loss: %.6f' % (a_loss_sum / gerrorcount), 'TD error: %.6f' % (c_loss_sum / gerrorcount))
-    #
-    #             if looptype != 0:
-    #                 if explore_bound < act_bound * 0.75:
-    #                     explore_bound *= 1.0  # .9998
-    #                 else:
-    #                     explore_bound *= .9995
-    #
-    #                 if gerrorcount == 0:
-    #                     gerrorcount = 1
-    #                 print('Episode:', i, 'Step:', j, ' Avg eward: %i' % int(reward_sum), 'Explore: %.5f' % explore_bound,
-    #                       'A loss: %.6f' % (a_loss_sum / gerrorcount), 'TD error: %.6f' % (c_loss_sum / gerrorcount))
-    #
-    #                 qLen = len(q_list)
-    #                 for idx in range(qLen):
-    #                     if idx > 15:
-    #                         break
-    #                     print(q_list[qLen-idx-1], end=" ")
-    #                 print("")
-    #
-    #             break
+    # ddpg1 = DDPG(act_dim, state_dim, act_bound)
+    # ddpg1.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_first_step/0424_firstStep100.0.ckpt")
+    # ddpg1.test(env, 1000)
+    # ddpg2 = DDPG(act_dim, state_dim, act_bound)
+    # ddpg2.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_second_step/0424_secondStep100.0.ckpt")
+    # multistage_test(env, 1000, ddpg1, ddpg2)
+
 
     print('Running time: ', time.time() - start_time)
 

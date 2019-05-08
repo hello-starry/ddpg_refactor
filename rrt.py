@@ -7,8 +7,8 @@ import numpy as np
 from env.gazebo_env.suction_grasp_env import *
 from setting import SETTING
 
-state_dim = SETTING.STATE_SIZE
-act_dim = SETTING.ACT_SIZE
+state_dim = SETTING.STATE_DIMENTION
+act_dim = SETTING.ACT_DIMENTION
 act_bound = SETTING.ACT_BOUND
 
 class Node():
@@ -177,47 +177,44 @@ def main():
     env = suction_grasp_env(portStr)
     # rrt_step1_test(env)
 
-    tmp_pos = [4.51, -1.32, -0.4, 1.0, -1.34, 0.]
+    tmp_pos = [1.57, 0.96, 0.828, 0., 1.36, 0.]
     env.interface.GAZEBO_SetModel("vs060", make_6joint_dict(tmp_pos), {}, {})
     env.interface.GAZEBO_Step(1)
+    env.interface.GAZEBO_AddJoint("vs060", "J6", "panel", "panel_link")
+    env.is_sucked = True
     input("stop")
-    start_pos = joint_dict_to_list(env.interface.GAZEBO_GetPosition("vs060"))
-    end_pos = [4.71, -1.12, -0.46, 0., -1.54, 0.]
     max_iteration = 1000
     g_rate = 0.05
 
-    print("joint start pos:",start_pos)
-    print("joint end pos:", end_pos)
-
-    end_pos2 = [1.5, -0.92, -0.705, 0, -1.51, 0]
-
     # Adjust end position manually
-    # tmp_pos = [0.87, 0.91, 0.85, 0.80, 0.94, 0.]
-    # while True:
-    #     env.interface.GAZEBO_SetModel("vs060",make_6joint_dict(tmp_pos),{},{})
-    #     # env.interface.GAZEBO_SetModel("vs060",make_6joint_dict(end_pos2),{},{})
-    #     # collide_list = env.interface.GAZEBO_GetContactNames(0.00)
-    #     # if len(collide_list) != 0:
-    #     #     print(collide_list)
-    #     joint_dict = env.interface.GAZEBO_GetPosition("vs060")
-    #     print("current joint:",joint_dict_to_list(joint_dict))
-    #     tcp_pq = pq_dict_to_list(env.interface.GAZEBO_GetLinkPQByName("vs060","J6"))
-    #     plane_pq = pq_dict_to_list(env.interface.GAZEBO_GetLinkPQByName("panel","panel_link"))
-    #     tcp_q = tcp_pq[3:]
-    #     plane_q = plane_pq[3:]
-    #     orientation = 1-np.square(tcp_q[0]*plane_q[0]+tcp_q[1]*plane_q[1]+tcp_q[2]*plane_q[2]+tcp_q[3]*plane_q[3])
-    #     print("oreintation:",orientation)
-    #     env.interface.GAZEBO_Step(1)
-    #     collide_list = env.interface.GAZEBO_GetContactNames(0)
-    #     if len(collide_list) != 0:
-    #         print(collide_list)
-    #     str = input("input the moving value:")
-    #     str = str.split()
-    #     if len(str)!=6:
-    #         print("wrong input")
-    #         continue
-    #     for i in range(len(tmp_pos)):
-    #         tmp_pos[i] += float(str[i])
+    # tmp_pos = [0.87, 0.91, 0.85, 0.80, 0.94, 0.] # step1_rrt_start
+    tmp_pos = [1.71, -0.71, -0.87, -0.15, -1.76, -0.413] #step2_rrt_start
+    tmp_pos = [4.68, 1.024, 0.39, -0.006, 1.5, 0]
+    while True:
+        env.interface.GAZEBO_SetModel("vs060",make_6joint_dict(tmp_pos),{},{})
+        # env.interface.GAZEBO_SetModel("vs060",make_6joint_dict(end_pos2),{},{})
+        # collide_list = env.interface.GAZEBO_GetContactNames(0.00)
+        # if len(collide_list) != 0:
+        #     print(collide_list)
+        joint_dict = env.interface.GAZEBO_GetPosition("vs060")
+        print("current joint:",joint_dict_to_list(joint_dict))
+        tcp_pq = pq_dict_to_list(env.interface.GAZEBO_GetLinkPQByName("vs060","J6"))
+        panel_pq = pq_dict_to_list(env.interface.GAZEBO_GetLinkPQByName("panel","panel_link"))
+        tcp_q = tcp_pq[3:]
+        panel_q = panel_pq[3:]
+        orientation = 1-np.square(tcp_q[0]*panel_q[0]+tcp_q[1]*panel_q[1]+tcp_q[2]*panel_q[2]+tcp_q[3]*panel_q[3])
+        print("oreintation:",orientation)
+        env.interface.GAZEBO_Step(1)
+        collide_list = env.interface.GAZEBO_GetContactNames(0)
+        if len(collide_list) != 0:
+            print(collide_list)
+        str = input("input the moving value:")
+        str = str.split()
+        if len(str)!=6:
+            print("wrong input")
+            continue
+        for i in range(len(tmp_pos)):
+            tmp_pos[i] += float(str[i])
 
     # input("start")
     while True:

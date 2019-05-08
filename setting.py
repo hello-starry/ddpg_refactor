@@ -3,12 +3,13 @@
 
 class SETTING(object):
 
-    MULTITASK = False
-    SAVE_MODEL = True
+    RESET_FROM_LOG = False
+    RESET_FROM_RRT = False
+    SAVE_MODEL = False
     SAVE_STATE = False
 
-    MAX_EPISODES = 10000000
-    MAX_EP_STEPS = 800
+    MAX_EPISODES = 100000000
+    MAX_EP_STEPS = 600
     NEURONNUM = 1000
     LR_A = 1e-5  # learning rate for actor
     LR_C = 1e-5  # learning rate for critic
@@ -17,7 +18,6 @@ class SETTING(object):
     MEMORY_CAPACITY = 20000
     BATCH_SIZE = 128
 
-
     IMG_STATE = False
     IMG_WIDTH = 0
     IMG_HEIGHT = 0
@@ -25,12 +25,11 @@ class SETTING(object):
     IMG_STATE_RANGE = (0.,1.)
     IMG_FRAME = 1
 
-    STATE_SIZE = 7 + 6 + 7 + 7 + 1      #initial_tcp_pq + joint_angle + tcp_pq + goal_pq + is_sucked
+    STATE_DIMENTION = 7 + 6 + 7 + 7 + 1      #initial_tcp_pq + joint_angle + tcp_pq + goal_pq + is_sucked
     STATE_RANGE = (0.,1.)
 
-    ACT_SIZE = 6
+    ACT_DIMENTION = 6
     ACT_BOUND = 0.05
-
 
     # self.infodict["obs_array"] = True
     # self.infodict["obs_array_size"] = 6 + 7 + 7 + 1  # Joint 6 angle + tcp pq + panel pq + is_sucked

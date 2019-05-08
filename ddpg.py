@@ -12,7 +12,7 @@ class DDPG(object):
 
         self.memory = np.zeros((SETTING.MEMORY_CAPACITY, s_dim * 2 + a_dim + 1 + 1), dtype=np.float32)
         self.index_pointer = 0
-        # if SETTING.MULTITASK:
+        # if SETTING.RESET_FROM_LOG:
         #     self.log_file = open("0424_log_secondStep.txt","w+")
         # else:
         #     self.log_file = open("0424_log_allStep.txt","w+")
@@ -22,7 +22,7 @@ class DDPG(object):
         session_config.gpu_options.allow_growth=True
         self.sess = tf.Session(config=session_config)
         self.saved_model_path = "/home/ccchang/ddpg_refactor/saved_model/"
-        self.max_goal_rate = 0
+        self.max_goal_rate = 1
 
         def ema_getter(getter, name, *args, **kwargs):
             return ema.average(getter(name, *args, **kwargs))
@@ -73,8 +73,10 @@ class DDPG(object):
         act_bound = SETTING.ACT_BOUND
         explore_bound = act_bound * 1.5
         for i in range(1000):
-            if SETTING.MULTITASK:
+            if SETTING.RESET_FROM_LOG:
                 s, r, done = env.reset_from_record()
+            elif SETTING.RESET_FROM_RRT:
+                s, r, done = env.reset_from_RRT()
             else:
                 s, r, done = env.reset()
 
@@ -94,17 +96,17 @@ class DDPG(object):
         return
 
     def train(self,env):
-        self.log_file = open("tmp", "w+")
+        self.log_file = open("0507_ddpgRRT_secondStep", "w+")
         for i in range(SETTING.MAX_EPISODES):
-            if i%100 == 0:
-                self.test(env,100)
+            if i%100 == 0 and i!=0:
+                self.test(env,20)
                 # self.save_model()
-
-            if SETTING.MULTITASK:
+            if SETTING.RESET_FROM_LOG:
                 s, r, done = env.reset_from_record()
+            elif SETTING.RESET_FROM_RRT:
+                s, r, done = env.reset_from_RRT()
             else:
                 s, r, done = env.reset()
-
             a_loss_sum = 0
             c_loss_sum = 0
             reward_sum = 0
@@ -121,7 +123,7 @@ class DDPG(object):
                 s = s_
                 reward_sum += r
                 if j == SETTING.MAX_EP_STEPS - 1 or done == True:
-                    print('Episode:', i, 'Step:', j, ' Avg eward: %i' % int(reward_sum), 'Explore: %.5f' % explore_bound,
+                    print('Episode:', i, 'Step:', j, ' Avg reward: %i' % int(reward_sum), 'Explore: %.5f' % explore_bound,
                           'A loss: %.6f' % (a_loss_sum / (j+1)), 'TD error: %.6f' % (c_loss_sum / (j+1)))
                     break
 
@@ -131,16 +133,19 @@ class DDPG(object):
         reward_sum = 0
         act_bound = SETTING.ACT_BOUND
 
-        # start_pos = [4.21, -0.92, -0.26, 0.8, -1.34, 0.1]
-        # end_pos = [4.71, -1.12, -0.46, 0., -1.54, 0.]
-        end_pos = [1.57, 0.96, 0.828, 0., 1.36, 0.]
+        end_pos = [1.57, 0.96, 0.828, 0., 1.36, 0.] # first step end
+        end_pos2 = [1.59, -1., -0.575, 0., -1.56, 0.] # second step end , horizontally move
+        end_pos3 = [4.705, 1.024, 0.59, 0, 1.54, 0.] #second step end, vertically move
+
         max_iteration = 600
         g_rate = 0.05
         e_factor = 0.1
 
         for i in range(test_round):
-            if SETTING.MULTITASK:
+            if SETTING.RESET_FROM_LOG:
                 s, r, done = env.reset_from_record()
+            elif SETTING.RESET_FROM_RRT:
+                s, r, done = env.reset_from_RRT()
             else:
                 s, r, done = env.reset()
 
@@ -148,9 +153,7 @@ class DDPG(object):
                 a = self.choose_action(s)
                 a = np.clip(a, -act_bound, act_bound)
                 s_, r, done, is_goal = env.step(a)
-                time.sleep(0.02)
-
-                dist = env.get_tcp_target_distance()
+                time.sleep(0.04)
                 s = s_
                 if is_goal:
                     goal_count += 1
@@ -160,38 +163,47 @@ class DDPG(object):
                     break
 
                 #Apply RRT
-                if dist < 0.1:
+                if SETTING.RESET_FROM_RRT:
+                    dist = env.get_distance(link1_name="J6", link2_name="vg2_link")
+                else:
+                    dist = env.get_distance(link1_name="J6", link2_name="panel_link")
+
+                print("dist:",dist)
+
+                if dist < 0.15:
                     start_pos = joint_dict_to_list(env.interface.GAZEBO_GetPosition("vs060"))
-                    # env.interface.GAZEBO_SetModel("vs060", start_pos_dict, {}, {})
-                    rrt = RRT(env=env, start=start_pos, goal=end_pos, goal_sample_rate=g_rate, expand_factor=e_factor,
+                    # print("start pos:", start_pos)
+                    # input("stop")
+                    if SETTING.RESET_FROM_RRT:
+                        rrt = RRT(env=env, start=start_pos, goal=end_pos2, goal_sample_rate=g_rate, expand_factor=e_factor,
                               max_iteration=max_iteration)
+                    else:
+                        rrt = RRT(env=env, start=start_pos, goal=end_pos, goal_sample_rate=g_rate,expand_factor=e_factor,
+                                  max_iteration=max_iteration)
                     ptr = None
                     while ptr == None:
                         ptr = rrt.plan(animation=False)
 
                     while ptr != None:
                         env.interface.GAZEBO_SetModel("vs060", make_6joint_dict(ptr.joint_pos), {}, {})
-                        time.sleep(0.02)
+                        time.sleep(0.04)
                         env.interface.GAZEBO_Step(1)
                         ptr = ptr.next
                     goal_count += 1
                     break
 
         goal_rate = round(goal_count/test_round*100, 2)
-
         if SETTING.SAVE_MODEL:
-            if self.max_goal_rate < goal_rate:
+            if self.max_goal_rate <= goal_rate:
                 self.max_goal_rate = goal_rate
-                self.save_model("0425_secondStep" + str(goal_rate) + ".ckpt")
+                self.save_model("0508_ddpgRRT_secondStep" + str(goal_rate) + ".ckpt")
 
-                # if SETTING.MULTITASK==True:
+                # if SETTING.RESET_FROM_LOG==True:
                 #     self.save_model("0424_secondStep" + str(goal_rate) + ".ckpt")
                 # else:
                 #     self.save_model("0424_firstStep" + str(goal_rate) + ".ckpt")
-
             print("{}\t{}\t{}".format(goal_rate, reward_sum / test_round, step_count), file=self.log_file)
             self.log_file.flush()
-
         print("===============================================================================")
         print("goal_rate:{}% average_reward:{}, step_count:{}"
                   .format(goal_rate, reward_sum/test_round, step_count))
