@@ -5,7 +5,7 @@ class SETTING(object):
 
     RESET_FROM_LOG = False
     RESET_FROM_RRT = False
-    SAVE_MODEL = False
+    SAVE_MODEL = True
     SAVE_STATE = False
 
     MAX_EPISODES = 100000000

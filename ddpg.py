@@ -34,8 +34,11 @@ class DDPG(object):
             self.R = tf.placeholder(tf.float32, [None, 1], 'r')
             self.done = tf.placeholder(tf.float32, [None, 1],'done')
 
-            self.a = self._build_a(self.S,)
+            self.a = self._build_a(self.S)
             self.q = self._build_c(self.S, self.a)
+
+            self.action_gradients = tf.gradients(self.q, self.a)
+
             a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Actor')
             c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='Critic')
             ema = tf.train.ExponentialMovingAverage(decay=1 - SETTING.TAU)          # soft replacement
@@ -43,15 +46,22 @@ class DDPG(object):
             a_ = self._build_a(self.S_, reuse=True, custom_getter=ema_getter)   # replaced target parameters
             q_ = self._build_c(self.S_, a_, reuse=True, custom_getter=ema_getter)
 
-            self.a_loss = - tf.reduce_mean(self.q)  # maximize the q
-            self.actor_train = tf.train.AdamOptimizer(SETTING.LR_A).minimize(self.a_loss, var_list=a_params)
-
+            #update ciritic network
             with tf.control_dependencies(target_update):    # soft targetnet update
                 # q_target = self.R + SETTING.GAMMA * q_
                 q_target = self.R + (1.-self.done) * SETTING.GAMMA * q_
-
                 self.td_loss = tf.losses.mean_squared_error(labels=q_target, predictions=self.q)
                 self.critic_train = tf.train.AdamOptimizer(SETTING.LR_C).minimize(self.td_loss, var_list=c_params)
+
+            #update actor network
+            #Try
+            # self.a_loss = - tf.reduce_mean(self.q)  # maximize the q
+            # self.actor_train = tf.train.AdamOptimizer(SETTING.LR_A).minimize(self.a_loss, var_list=a_params)
+
+            self.q_gradient_input = tf.placeholder("float", [None, SETTING.ACT_DIMENTION])
+            self.parameters_gradients = tf.gradients(self.a, a_params, -self.q_gradient_input)
+            self.params_and_grads = zip(self.parameters_gradients, a_params)
+            self.actor_train = tf.train.AdamOptimizer(SETTING.LR_A).apply_gradients(self.params_and_grads)
 
             self.sess.run(tf.global_variables_initializer())
             self.saver = tf.train.Saver()
@@ -96,10 +106,10 @@ class DDPG(object):
         return
 
     def train(self,env):
-        self.log_file = open("0507_ddpgRRT_secondStep", "w+")
+        self.log_file = open("0522update_modify.txt", "w+")
         for i in range(SETTING.MAX_EPISODES):
             if i%100 == 0 and i!=0:
-                self.test(env,20)
+                self.test(env,5)
                 # self.save_model()
             if SETTING.RESET_FROM_LOG:
                 s, r, done = env.reset_from_record()
@@ -163,40 +173,38 @@ class DDPG(object):
                     break
 
                 #Apply RRT
-                if SETTING.RESET_FROM_RRT:
-                    dist = env.get_distance(link1_name="J6", link2_name="vg2_link")
-                else:
-                    dist = env.get_distance(link1_name="J6", link2_name="panel_link")
-
-                print("dist:",dist)
-
-                if dist < 0.15:
-                    start_pos = joint_dict_to_list(env.interface.GAZEBO_GetPosition("vs060"))
-                    # print("start pos:", start_pos)
-                    # input("stop")
-                    if SETTING.RESET_FROM_RRT:
-                        rrt = RRT(env=env, start=start_pos, goal=end_pos2, goal_sample_rate=g_rate, expand_factor=e_factor,
-                              max_iteration=max_iteration)
-                    else:
-                        rrt = RRT(env=env, start=start_pos, goal=end_pos, goal_sample_rate=g_rate,expand_factor=e_factor,
-                                  max_iteration=max_iteration)
-                    ptr = None
-                    while ptr == None:
-                        ptr = rrt.plan(animation=False)
-
-                    while ptr != None:
-                        env.interface.GAZEBO_SetModel("vs060", make_6joint_dict(ptr.joint_pos), {}, {})
-                        time.sleep(0.04)
-                        env.interface.GAZEBO_Step(1)
-                        ptr = ptr.next
-                    goal_count += 1
-                    break
+                # if SETTING.RESET_FROM_RRT:
+                #     dist = env.get_distance(link1_name="J6", link2_name="vg2_link")
+                # else:
+                #     dist = env.get_distance(link1_name="J6", link2_name="panel_link")
+                # # print("dist:",dist)
+                # if dist < 0.15:
+                #     start_pos = joint_dict_to_list(env.interface.GAZEBO_GetPosition("vs060"))
+                #     # print("start pos:", start_pos)
+                #     # input("stop")
+                #     if SETTING.RESET_FROM_RRT:
+                #         rrt = RRT(env=env, start=start_pos, goal=end_pos2, goal_sample_rate=g_rate, expand_factor=e_factor,
+                #               max_iteration=max_iteration)
+                #     else:
+                #         rrt = RRT(env=env, start=start_pos, goal=end_pos, goal_sample_rate=g_rate,expand_factor=e_factor,
+                #                   max_iteration=max_iteration)
+                #     ptr = None
+                #     while ptr == None:
+                #         ptr = rrt.plan(animation=False)
+                #
+                #     while ptr != None:
+                #         env.interface.GAZEBO_SetModel("vs060", make_6joint_dict(ptr.joint_pos), {}, {})
+                #         time.sleep(0.04)
+                #         env.interface.GAZEBO_Step(1)
+                #         ptr = ptr.next
+                #     goal_count += 1
+                #     break
 
         goal_rate = round(goal_count/test_round*100, 2)
         if SETTING.SAVE_MODEL:
             if self.max_goal_rate <= goal_rate:
                 self.max_goal_rate = goal_rate
-                self.save_model("0508_ddpgRRT_secondStep" + str(goal_rate) + ".ckpt")
+                self.save_model("0522update_modify" + str(goal_rate) + ".ckpt")
 
                 # if SETTING.RESET_FROM_LOG==True:
                 #     self.save_model("0424_secondStep" + str(goal_rate) + ".ckpt")
@@ -239,10 +247,15 @@ class DDPG(object):
         # print("shape of bs_:",np.shape(bs_))
         # input("stop here")
 
-        _, a_loss = self.sess.run([self.actor_train, self.a_loss], {self.S: bs})
+        #Train critic net
         _, td_error = self.sess.run([self.critic_train, self.td_loss],
                                     {self.S: bs, self.a: ba, self.R: br, self.done: bdone, self.S_: bs_})
 
+        #Train actor net
+        action_batch_for_gradients = self.sess.run(self.a, {self.S: bs})
+        q_gradient_batch = self.sess.run(self.action_gradients,feed_dict={self.S: bs, self.a: action_batch_for_gradients})[0]
+        self.sess.run(self.actor_train, feed_dict={self.q_gradient_input: q_gradient_batch, self.S: bs})
+        a_loss = 0.
         return a_loss, td_error
 
     def store_transition(self, s, a, r, done, s_):
@@ -259,8 +272,6 @@ class DDPG(object):
             net = tf.layers.dense(net, SETTING.NEURONNUM, activation=tf.nn.relu, name='l2', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
             net = tf.layers.dense(net, SETTING.NEURONNUM, activation=tf.nn.relu, name='l3', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
             net = tf.layers.dense(net, SETTING.NEURONNUM, activation=tf.nn.relu, name='l4', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
-            # net = tf.layers.dense(net, SETTING.NEURONNUM, activation=tf.nn.relu, name='l5', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
-
             a = tf.layers.dense(net, self.a_dim, activation=tf.nn.tanh, name='a', trainable=trainable, kernel_initializer=tf.contrib.layers.xavier_initializer())
             return tf.multiply(a, self.a_bound, name='scaled_a')
 

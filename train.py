@@ -149,11 +149,11 @@ def main():
     start_time = time.time()
 
     ddpg = DDPG(act_dim, state_dim, act_bound)
-    # ddpg.initial_replay_memory(env)
-    # ddpg.train(env)
+    ddpg.initial_replay_memory(env)
+    ddpg.train(env)
 
-    ddpg.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_first_step/0424_firstStep100.0.ckpt")
-    ddpg.test(env, 10000)
+    # ddpg.restore_model("/home/ccchang/ddpg_refactor/saved_model/0424_first_step/0424_firstStep100.0.ckpt")
+    # ddpg.test(env, 10000)
 
     # ddpg.restore_model("/home/ccchang/ddpg_refactor/saved_model/0508_ddpgRRT_secondStep100.0.ckpt")
     # ddpg.test(env,10000)
